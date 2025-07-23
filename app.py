@@ -11,7 +11,7 @@ import streamlit as st
 IS_LOCAL = os.name == "nt"
 
 if IS_LOCAL:
-    # Only import these when running on your Windows machine
+    # Local-only imports
     import pyautogui
     import pywhatkit
     import speech_recognition as sr
@@ -19,9 +19,9 @@ if IS_LOCAL:
     from playsound import playsound
     import edge_tts
 
-    load_dotenv()  # load your local .env
+    load_dotenv()  # load .env locally
 else:
-    # Provide no-op stand-ins so code syntax still works on Cloud
+    # No-op stand-ins for cloud
     pyautogui = None
     pywhatkit = None
     sr = None
@@ -31,161 +31,33 @@ else:
 
 # ─── Secrets / Config ────────────────────────────────────
 MISTRAL_API_KEY = (
-    st.secrets["MISTRAL_API_KEY"]
-    if "MISTRAL_API_KEY" in st.secrets
-    else os.getenv("MISTRAL_API_KEY")
+    st.secrets.get("MISTRAL_API_KEY") or os.getenv("MISTRAL_API_KEY")
 )
-
 SPOTIFY_PATH = (
-    st.secrets["SPOTIFY_PATH"]
-    if "SPOTIFY_PATH" in st.secrets
-    else os.getenv("SPOTIFY_PATH")
+    st.secrets.get("SPOTIFY_PATH") or os.getenv("SPOTIFY_PATH")
 )
 
-# ─── Page config & CSS ────────────────────────────────────
-st.set_page_config(
-    page_title="🧠 Jarvis AI",
-    page_icon="🤖",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# ─── TTS helper for cloud and local ───────────────────────
+async def _tts_to_file(text: str) -> str:
+    """Generate an MP3 via edge-tts and return its filename."""
+    fname = f"tts_{uuid.uuid4()}.mp3"
+    await edge_tts.Communicate(text, voice="en-US-GuyNeural").save(fname)
+    return fname
 
-st.markdown(
-    """
-    <style>
-      body { background: #0d0d0d; color: #e6e6e6; }
-      .stButton>button { background-color:#1a1a1a; color:#0ff; border-radius:8px; }
-      .stTextInput>div>div>input { background: #1a1a1a; color:#0ff; border-radius:4px; }
-      .sidebar .sidebar-content { background: #111; }
-      .stFileUploader>div>div>input { background: #1a1a1a; color:#0ff; }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# ─── Streamlit container-level CSS for dynamic themes ──
-THEMES = {
-    "Dark": """
-        <style>
-        html, body, [data-testid="stApp"] {
-            background-color: #0d0d0d;
-            color: #e6e6e6;
-        }
-        </style>
-    """,
-    "Neon Blue": """
-        <style>
-        html, body, [data-testid="stApp"] {
-            background-color: #001f3f;
-            color: #7fdbff;
-        }
-        </style>
-    """,
-    "Matrix Green": """
-        <style>
-        html, body, [data-testid="stApp"] {
-            background-color: #001100;
-            color: #00ff00;
-        }
-        </style>
-    """
-}
-st.markdown("""
-<style>
-/* Typewriter animation */
-@keyframes typing {
-  from { width: 0; }
-  to   { width: 100%; }
-}
-@keyframes blink-caret {
-  50% { border-color: transparent; }
-}
-
-/* Wrapper for typewriter text */
-.typewriter {
-  font-family: 'Courier New', monospace;
-  overflow: hidden;            /* hide excess */
-  white-space: nowrap;         /* no wrap */
-  border-right: .2em solid #0ff;
-  width: 0;                    /* start at 0 width */
-  animation:
-    typing 2s steps(40, end),
-    blink-caret .75s step-end infinite;
-}
-
-/* Hologram glow */
-.typewriter {
-  color: #0ff;
-  text-shadow:
-    0 0 4px #0ff,
-    0 0 8px #0ff;
-}
-</style>
-""", unsafe_allow_html=True)
-
-
-COMMON_CSS = """
-<style>
-.stButton>button {
-    background-color: #1a1a1a;
-    color: #0ff;
-    border-radius: 8px;
-}
-.stTextInput>div>div>input {
-    background: #1a1a1a;
-    color: #0ff;
-    border-radius: 4px;
-}
-.sidebar .sidebar-content {
-    background: #111;
-}
-.stFileUploader>div>div>input {
-    background: #1a1a1a;
-    color: #0ff;
-}
-</style>
-"""
-
-scanlines = """
-<style>
-/* Scan lines */
-[data-testid="stApp"]::before {
-  content: "";
-  position: absolute;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: linear-gradient(transparent 95%, rgba(0,255,255,0.05) 40%);
-  background-size: 100% 2px;
-  pointer-events: none;
-  z-index: 10;
-}
-/* Neon text */
-h1, h2, .stButton>button {
-  text-shadow:
-     0 0 4px #0ff,
-     0 0 8px #0ff,
-     0 0 16px #0ff;
-}
-"""
-
-# [Omitted for brevity – copy your COMMON_CSS, THEMES, scanlines, typewriter blocks]
-
-# ─── Helper: Speak (Edge-TTS) ─────────────────────────────
-if IS_LOCAL:
-    async def _speak_async(text):
-        fname = f"tts_{uuid.uuid4()}.mp3"
-        await edge_tts.Communicate(text, voice="en-US-GuyNeural").save(fname)
+# ─── Speak helper ─────────────────────────────────────────
+def speak(text: str):
+    st.markdown(f"**🤖 Jarvis:** {text}")
+    # generate TTS file
+    if IS_LOCAL:
+        fname = asyncio.run(_tts_to_file(text))
         playsound(fname)
         os.remove(fname)
+    else:
+        fname = asyncio.run(_tts_to_file(text))
+        st.audio(fname, format="audio/mp3")
+        os.remove(fname)
 
-    def speak(text):
-        st.markdown(f"**🤖 Jarvis:** {text}")
-        asyncio.run(_speak_async(text))
-else:
-    # No-op on Cloud
-    def speak(text):
-        st.markdown(f"**🤖 Jarvis:** {text}")
-
-# ─── Helper: Transcribe Audio ────────────────────────────
+# ─── Transcribe audio ────────────────────────────────────
 def transcribe_audio(file_bytes):
     if not IS_LOCAL:
         return None
@@ -198,36 +70,36 @@ def transcribe_audio(file_bytes):
         return None
 
 # ─── Mistral LLM Call ─────────────────────────────────────
-def ask_mistral(prompt):
+def ask_mistral(prompt: str) -> str:
     url = "https://api.mistral.ai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {MISTRAL_API_KEY}",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
-    body = {
+    payload = {
         "model": "mistral-tiny",
         "messages": [
             {"role": "system", "content": "You are Jarvis, a futuristic AI assistant."},
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": prompt}
         ],
-        "temperature": 0.1,
+        "temperature": 0.1
     }
     try:
-        res = requests.post(url, headers=headers, json=body)
+        res = requests.post(url, headers=headers, json=payload)
         res.raise_for_status()
         return res.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         st.error(f"⚠️ Mistral error: {e}")
         return "Sorry, I can’t think right now…"
 
-# ─── Helper: Play on Spotify or YouTube ──────────────────
+# ─── Play music helper ────────────────────────────────────
 def play_on_spotify(song: str):
     if not IS_LOCAL:
-        # Cloud: skip Spotify app, go straight to YouTube
+        # Cloud fallback: search on YouTube
         speak(f"Playing {song} on YouTube")
-        pywhatkit.playonyt(song)
+        query = song.replace(' ', '+')
+        webbrowser.open(f"https://www.youtube.com/results?search_query={query}")
         return
-
     try:
         speak(f"Searching for {song} on Spotify")
         os.startfile(SPOTIFY_PATH)
@@ -242,29 +114,29 @@ def play_on_spotify(song: str):
         speak(f"Could not play on Spotify, falling back to YouTube")
         pywhatkit.playonyt(song)
 
-# ─── Command Router ──────────────────────────────────────
+# ─── Command routing ─────────────────────────────────────
 def handle_command(cmd: str):
     cmd = cmd.lower().strip()
     if not cmd:
         speak("…I heard nothing.")
         return
-
     st.markdown(f"**🗣️ You:** {cmd}")
-
-    # Play “X on YouTube”
+    # Play on YouTube explicitly
     if cmd.startswith("play") and " on youtube" in cmd:
         song = cmd.removeprefix("play").removesuffix("on youtube").strip()
         speak(f"Playing {song} on YouTube")
-        pywhatkit.playonyt(song)
+        if IS_LOCAL:
+            pywhatkit.playonyt(song)
+        else:
+            query = song.replace(' ', '+')
+            webbrowser.open(f"https://www.youtube.com/results?search_query={query}")
         return
-
-    # Play “X” => Spotify locally or YouTube on Cloud
+    # Play on Spotify or fallback
     if cmd.startswith("play"):
         song = cmd.removeprefix("play").strip()
         play_on_spotify(song)
         return
-
-    # Open Spotify app (local only)
+    # Open Spotify app
     if "open spotify" in cmd:
         if IS_LOCAL:
             speak("Opening Spotify")
@@ -272,25 +144,76 @@ def handle_command(cmd: str):
         else:
             speak("Spotify controls unavailable in cloud.")
         return
-
     # Open YouTube homepage
     if "open youtube" in cmd:
         speak("Opening YouTube")
         webbrowser.open("https://youtube.com")
         return
-
-    # Fallback: LLM
+    # Fallback: ask LLM
     speak("Let me think…")
     answer = ask_mistral(cmd)
     speak(answer)
 
-# ─── Sidebar & Main UI ───────────────────────────────────
-st.sidebar.title("⚙️ Settings")
-theme = st.sidebar.selectbox("Theme", ["Dark", "Neon Blue", "Matrix Green"])
+# ─── CSS and UI Setup ────────────────────────────────────
+st.set_page_config(
+    page_title="🧠 Jarvis AI",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+COMMON_CSS = """
+<style>
+.stButton>button { background-color:#1a1a1a; color:#0ff; border-radius:8px; }
+.stTextInput>div>div>input { background:#1a1a1a; color:#0ff; border-radius:4px; }
+.sidebar .sidebar-content { background:#111; }
+.stFileUploader>div>div>input { background:#1a1a1a; color:#0ff; }
+</style>
+"""
+
+scanlines = """
+<style>
+[data-testid="stApp"]::before {
+  content: "";
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(transparent 95%, rgba(0,255,255,0.05) 40%);
+  background-size: 100% 2px;
+  pointer-events: none; z-index: 10;
+}
+h1, h2, .stButton>button {
+  text-shadow: 0 0 4px #0ff, 0 0 8px #0ff, 0 0 16px #0ff;
+}
+</style>
+"""
+
+typewriter_css = """
+<style>
+@keyframes typing { from { width:0; } to { width:100%; } }
+@keyframes blink-caret { 50% { border-color:transparent; } }
+.typewriter {
+  font-family:'Courier New', monospace; overflow:hidden; white-space:nowrap;
+  border-right:.2em solid #0ff; width:0;
+  animation: typing 2s steps(40,end), blink-caret .75s step-end infinite;
+  color:#0ff; text-shadow:0 0 4px #0ff,0 0 8px #0ff;
+}
+</style>
+"""
+
 st.markdown(scanlines, unsafe_allow_html=True)
 st.markdown(COMMON_CSS, unsafe_allow_html=True)
+st.markdown(typewriter_css, unsafe_allow_html=True)
+
+THEMES = {
+    "Dark":    "<style>html, body, [data-testid='stApp']{background:#0d0d0d;color:#e6e6e6;}</style>",
+    "Neon Blue":    "<style>html, body, [data-testid='stApp']{background:#001f3f;color:#7fdbff;}</style>",
+    "Matrix Green":"<style>html, body, [data-testid='stApp']{background:#001100;color:#00ff00;}</style>"
+}
+
+st.sidebar.title("⚙️ Settings")
+theme = st.sidebar.selectbox("Theme", list(THEMES.keys()))
 st.markdown(THEMES[theme], unsafe_allow_html=True)
 
+# ─── Main UI ────────────────────────────────────────────
 st.title("🧠 **Jarvis AI**")
 st.write("Your futuristic assistant. 🔮")
 
@@ -298,7 +221,7 @@ cmd_txt = st.text_input("💬 Type a command…")
 if st.button("🚀 Send"):
     handle_command(cmd_txt)
 
-audio_file = st.file_uploader("🎙️ Upload a WAV/MP3 clip", type=["wav", "mp3"])
+audio_file = st.file_uploader("🎙️ Upload a WAV/MP3 clip", type=["wav","mp3"])
 if audio_file:
     st.info("Transcribing…")
     cmd = transcribe_audio(audio_file)
