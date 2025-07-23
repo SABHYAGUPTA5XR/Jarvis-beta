@@ -1,23 +1,55 @@
-import os, uuid, asyncio, requests, time, webbrowser, pyautogui, pywhatkit
-from dotenv import load_dotenv
-from playsound import playsound
-import edge_tts
+import os
+import uuid
+import asyncio
+import requests
+import time
+import webbrowser
+
 import streamlit as st
-import speech_recognition as sr
 
+# ─── Detect Local vs. Cloud ──────────────────────────────
+IS_LOCAL = os.name == "nt"
 
-# ─── Load secrets ───────────────────────────────────────
-load_dotenv()
-MISTRAL_API_KEY = st.secrets["MISTRAL_API_KEY"] if "MISTRAL_API_KEY" in st.secrets else os.getenv("MISTRAL_API_KEY")
+if IS_LOCAL:
+    # Only import these when running on your Windows machine
+    import pyautogui
+    import pywhatkit
+    import speech_recognition as sr
+    from dotenv import load_dotenv
+    from playsound import playsound
+    import edge_tts
 
+    load_dotenv()  # load your local .env
+else:
+    # Provide no-op stand-ins so code syntax still works on Cloud
+    pyautogui = None
+    pywhatkit = None
+    sr = None
+    load_dotenv = lambda *a, **k: None
+    playsound = lambda *a, **k: None
+    edge_tts = None
 
-# ─── Page config & custom CSS ──────────────────────────
+# ─── Secrets / Config ────────────────────────────────────
+MISTRAL_API_KEY = (
+    st.secrets["MISTRAL_API_KEY"]
+    if "MISTRAL_API_KEY" in st.secrets
+    else os.getenv("MISTRAL_API_KEY")
+)
+
+SPOTIFY_PATH = (
+    st.secrets["SPOTIFY_PATH"]
+    if "SPOTIFY_PATH" in st.secrets
+    else os.getenv("SPOTIFY_PATH")
+)
+
+# ─── Page config & CSS ────────────────────────────────────
 st.set_page_config(
     page_title="🧠 Jarvis AI",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
 st.markdown(
     """
     <style>
@@ -30,119 +62,6 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
-# ─── Helper: Speak with Edge‑TTS ────────────────────────
-async def _speak_async(text):
-    fname = f"tts_{uuid.uuid4()}.mp3"
-    await edge_tts.Communicate(text, voice="en-US-GuyNeural").save(fname)
-    playsound(fname)
-    os.remove(fname)
-
-def speak(text):
-    st.markdown(f"**🤖 Jarvis:** {text}")
-    asyncio.run(_speak_async(text))
-
-# ─── Helper: Transcribe uploaded audio ─────────────────
-def transcribe_audio(file_bytes):
-    r = sr.Recognizer()
-    with sr.AudioFile(file_bytes) as src:
-        audio = r.record(src)
-    try:
-        return r.recognize_google(audio)
-    except:
-        return None
-
-# ─── Mistral LLM call ───────────────────────────────────
-def ask_mistral(prompt):
-    url = "https://api.mistral.ai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {MISTRAL_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    body = {
-        "model":"mistral-tiny",
-        "messages":[
-            {"role":"system","content":"You are Jarvis, a futuristic AI assistant."},
-            {"role":"user","content":prompt}
-        ],
-        "temperature":0.1
-    }
-    try:
-        res = requests.post(url, headers=headers, json=body)
-        res.raise_for_status()
-        return res.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        st.error(f"⚠️ Mistral error: {e}")
-        return "Sorry, I can’t think right now…"
-
-# ─── Core command processing ────────────────────────────
-
-# ─── Helper: Play a song on Spotify or fallback to YouTube ─────────────────
-def play_on_spotify(song: str):
-    try:
-        speak(f"Searching for {song} on Spotify")
-        os.startfile(st.secrets["SPOTIFY_PATH"] if "SPOTIFY_PATH" in st.secrets else os.getenv("SPOTIFY_PATH"))
-        time.sleep(5)
-
-        # focus search bar, type song, hit enter
-        pyautogui.hotkey("ctrl", "l")
-        pyautogui.write(song)
-        pyautogui.press("enter")
-        time.sleep(2)
-
-        # navigate to first result + play
-        pyautogui.press("tab", presses=1, interval=0.2)
-        pyautogui.press("enter")
-        time.sleep(2)
-        pyautogui.press("enter")
-    except Exception:
-        speak(f"Could not play on Spotify, falling back to YouTube")
-        pywhatkit.playonyt(song)
-
-
-# ─── Command router ─────────────────────────────────────────────────────────
-def handle_command(cmd: str):
-    cmd = cmd.lower().strip()
-    if not cmd:
-        speak("…I heard nothing.")
-        return
-
-    st.markdown(f"**🗣️ You:** {cmd}")
-
-    # 1️⃣ Play on YouTube explicitly
-    if cmd.startswith("play") and " on youtube" in cmd:
-        song = cmd.removeprefix("play").removesuffix("on youtube").strip()
-        speak(f"Playing {song} on YouTube")
-        pywhatkit.playonyt(song)
-        return
-
-    # 2️⃣ Play on Spotify (fallbacks to YouTube)
-    if cmd.startswith("play"):
-        song = cmd.removeprefix("play").strip()
-        play_on_spotify(song)
-        return
-
-    # 3️⃣ Open Spotify app
-    if "open spotify" in cmd:
-        speak("Opening Spotify")
-        os.startfile(st.secrets["SPOTIFY_PATH"] if "SPOTIFY_PATH" in st.secrets else os.getenv("SPOTIFY_PATH"))
-        return
-
-    # 4️⃣ Open YouTube homepage
-    if "open youtube" in cmd:
-        speak("Opening YouTube")
-        webbrowser.open("https://youtube.com")
-        return
-
-    # 5️⃣ Fallback: query the LLM
-    speak("Let me think…")
-    answer = ask_mistral(cmd)
-    speak(answer)
-
-
-# ─── Sidebar controls ───────────────────────────────────
-st.sidebar.title("⚙️ Settings")
-theme = st.sidebar.selectbox("Theme", ["Dark", "Neon Blue", "Matrix Green"])
 
 # ─── Streamlit container-level CSS for dynamic themes ──
 THEMES = {
@@ -248,24 +167,138 @@ h1, h2, .stButton>button {
 }
 """
 
-st.markdown(scanlines, unsafe_allow_html=True)
+# [Omitted for brevity – copy your COMMON_CSS, THEMES, scanlines, typewriter blocks]
 
-# Inject styles
+# ─── Helper: Speak (Edge-TTS) ─────────────────────────────
+if IS_LOCAL:
+    async def _speak_async(text):
+        fname = f"tts_{uuid.uuid4()}.mp3"
+        await edge_tts.Communicate(text, voice="en-US-GuyNeural").save(fname)
+        playsound(fname)
+        os.remove(fname)
+
+    def speak(text):
+        st.markdown(f"**🤖 Jarvis:** {text}")
+        asyncio.run(_speak_async(text))
+else:
+    # No-op on Cloud
+    def speak(text):
+        st.markdown(f"**🤖 Jarvis:** {text}")
+
+# ─── Helper: Transcribe Audio ────────────────────────────
+def transcribe_audio(file_bytes):
+    if not IS_LOCAL:
+        return None
+    r = sr.Recognizer()
+    with sr.AudioFile(file_bytes) as src:
+        audio = r.record(src)
+    try:
+        return r.recognize_google(audio)
+    except:
+        return None
+
+# ─── Mistral LLM Call ─────────────────────────────────────
+def ask_mistral(prompt):
+    url = "https://api.mistral.ai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {MISTRAL_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    body = {
+        "model": "mistral-tiny",
+        "messages": [
+            {"role": "system", "content": "You are Jarvis, a futuristic AI assistant."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.1,
+    }
+    try:
+        res = requests.post(url, headers=headers, json=body)
+        res.raise_for_status()
+        return res.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        st.error(f"⚠️ Mistral error: {e}")
+        return "Sorry, I can’t think right now…"
+
+# ─── Helper: Play on Spotify or YouTube ──────────────────
+def play_on_spotify(song: str):
+    if not IS_LOCAL:
+        # Cloud: skip Spotify app, go straight to YouTube
+        speak(f"Playing {song} on YouTube")
+        pywhatkit.playonyt(song)
+        return
+
+    try:
+        speak(f"Searching for {song} on Spotify")
+        os.startfile(SPOTIFY_PATH)
+        time.sleep(5)
+        pyautogui.hotkey("ctrl", "l")
+        pyautogui.write(song)
+        pyautogui.press("enter"); time.sleep(2)
+        pyautogui.press("tab", presses=1, interval=0.2)
+        pyautogui.press("enter"); time.sleep(2)
+        pyautogui.press("enter")
+    except Exception:
+        speak(f"Could not play on Spotify, falling back to YouTube")
+        pywhatkit.playonyt(song)
+
+# ─── Command Router ──────────────────────────────────────
+def handle_command(cmd: str):
+    cmd = cmd.lower().strip()
+    if not cmd:
+        speak("…I heard nothing.")
+        return
+
+    st.markdown(f"**🗣️ You:** {cmd}")
+
+    # Play “X on YouTube”
+    if cmd.startswith("play") and " on youtube" in cmd:
+        song = cmd.removeprefix("play").removesuffix("on youtube").strip()
+        speak(f"Playing {song} on YouTube")
+        pywhatkit.playonyt(song)
+        return
+
+    # Play “X” => Spotify locally or YouTube on Cloud
+    if cmd.startswith("play"):
+        song = cmd.removeprefix("play").strip()
+        play_on_spotify(song)
+        return
+
+    # Open Spotify app (local only)
+    if "open spotify" in cmd:
+        if IS_LOCAL:
+            speak("Opening Spotify")
+            os.startfile(SPOTIFY_PATH)
+        else:
+            speak("Spotify controls unavailable in cloud.")
+        return
+
+    # Open YouTube homepage
+    if "open youtube" in cmd:
+        speak("Opening YouTube")
+        webbrowser.open("https://youtube.com")
+        return
+
+    # Fallback: LLM
+    speak("Let me think…")
+    answer = ask_mistral(cmd)
+    speak(answer)
+
+# ─── Sidebar & Main UI ───────────────────────────────────
+st.sidebar.title("⚙️ Settings")
+theme = st.sidebar.selectbox("Theme", ["Dark", "Neon Blue", "Matrix Green"])
+st.markdown(scanlines, unsafe_allow_html=True)
 st.markdown(COMMON_CSS, unsafe_allow_html=True)
 st.markdown(THEMES[theme], unsafe_allow_html=True)
 
-
-# ─── Main UI ────────────────────────────────────────────
 st.title("🧠 **Jarvis AI**")
 st.write("Your futuristic assistant. 🔮")
-# **1. Text input**
-cmd_txt = st.text_input("💬 Type a command, e.g. “Play Saiyaara song”, What is capital of india?")
 
+cmd_txt = st.text_input("💬 Type a command…")
 if st.button("🚀 Send"):
     handle_command(cmd_txt)
 
-# **2. Upload audio**
-audio_file = st.file_uploader("🎙️ Upload a WAV/MP3 clip", type=["wav","mp3"])
+audio_file = st.file_uploader("🎙️ Upload a WAV/MP3 clip", type=["wav", "mp3"])
 if audio_file:
     st.info("Transcribing…")
     cmd = transcribe_audio(audio_file)
@@ -274,13 +307,6 @@ if audio_file:
     else:
         speak("Sorry, I couldn’t understand the audio.")
 
-# **3. (Local) Record button**  
-# Note: Real‐time mic recording isn’t supported on Streamlit Cloud,
-# but you can record locally then upload.
 st.caption("📌 To speak live: record locally, then upload above.")
-
 st.markdown("---")
 st.write("Built with ❤️ by _Sabhya_")
-st.write("_*Checkout [Github](https://github.com/SABHYAGUPTA5XR/Jarvis-2.0) for Voice assisted Jarvis-2.0!!*_")
-
-
