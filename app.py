@@ -10,24 +10,25 @@ import streamlit as st
 # ─── Detect Local vs. Cloud ──────────────────────────────
 IS_LOCAL = os.name == "nt"
 
-# ─── Detect Local vs. Cloud ──────────────────────────────
-IS_LOCAL = os.name == "nt"
-
-# Local-only dependencies
 if IS_LOCAL:
+    # Local-only imports
     import pyautogui
     import pywhatkit
     import speech_recognition as sr
     from dotenv import load_dotenv
     from playsound import playsound
-    load_dotenv()
+    import edge_tts
+
+    load_dotenv()  # load .env locally
 else:
-    # No-op for local-only packages; edge_tts always available
+    # No-op stand-ins for cloud
     pyautogui = None
     pywhatkit = None
     sr = None
     load_dotenv = lambda *a, **k: None
     playsound = lambda *a, **k: None
+    edge_tts = None
+
 # ─── Secrets / Config ────────────────────────────────────
 MISTRAL_API_KEY = (
     st.secrets.get("MISTRAL_API_KEY") or os.getenv("MISTRAL_API_KEY")
