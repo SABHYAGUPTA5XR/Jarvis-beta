@@ -1,0 +1,9 @@
+streamlit
+edge-tts
+requests
+python-dotenv
+speechrecognition
+pyaudio
+pyautogui
+pywhatkit
+playsound==1.2.2

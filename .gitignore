@@ -1,0 +1,60 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.venv/
+.env/
+
+# VS Code settings
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Environment variables
+.env
+*.env
+
+# Logs
+*.log
+
+# System files
+*.swp
+*.swo
+
+# pywhatkit caches
+pywhatkit_dbs/
+
+# Audio recordings/output files
+*.wav
+*.mp3
+*.ogg
+
+# pyttsx3 temp files
+temp_audio.mp3
+tts_output.mp3
+
+# Streamlit specific
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# Cache or user-specific
+*.db
+*.sqlite3
+__pycache__/
+.cache/
+
+# Misc
+*.bak
+*.tmp
+*.old
+
+# OS-specific folders
+.idea/
