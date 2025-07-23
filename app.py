@@ -5,9 +5,11 @@ import edge_tts
 import streamlit as st
 import speech_recognition as sr
 
+
 # ─── Load secrets ───────────────────────────────────────
 load_dotenv()
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+MISTRAL_API_KEY = st.secrets["MISTRAL_API_KEY"] if "MISTRAL_API_KEY" in st.secrets else os.getenv("MISTRAL_API_KEY")
+
 
 # ─── Page config & custom CSS ──────────────────────────
 st.set_page_config(
@@ -79,7 +81,7 @@ def ask_mistral(prompt):
 def play_on_spotify(song: str):
     try:
         speak(f"Searching for {song} on Spotify")
-        os.startfile(os.getenv("SPOTIFY_PATH"))
+        os.startfile(st.secrets["SPOTIFY_PATH"] if "SPOTIFY_PATH" in st.secrets else os.getenv("SPOTIFY_PATH"))
         time.sleep(5)
 
         # focus search bar, type song, hit enter
@@ -123,7 +125,7 @@ def handle_command(cmd: str):
     # 3️⃣ Open Spotify app
     if "open spotify" in cmd:
         speak("Opening Spotify")
-        os.startfile(os.getenv("SPOTIFY_PATH"))
+        os.startfile(st.secrets["SPOTIFY_PATH"] if "SPOTIFY_PATH" in st.secrets else os.getenv("SPOTIFY_PATH"))
         return
 
     # 4️⃣ Open YouTube homepage
