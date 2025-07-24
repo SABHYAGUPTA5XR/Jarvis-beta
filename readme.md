@@ -1,5 +1,10 @@
 # 🎙️ JARVIS - Voice Assistant (Beta)
 
+<p align="center">
+  <img src="home.png" alt="Description of image" width="800"/>
+</p>
+
+
 Welcome to **JARVIS-beta**, your personalized assistant built using Python, Streamlit, and Mistral AI!  
 It can understand your commands, perform tasks like playing music, opening websites, or even answering complex questions using LLMs.
 
